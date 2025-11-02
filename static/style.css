@@ -1,0 +1,159 @@
+:root {
+  --bg: #0f1724; /* deep navy */
+  --card: #0b1220;
+  --muted: #9aa4b2;
+  --accent: #6ee7b7; /* mint */
+  --accent-2: #60a5fa; /* blue */
+  --danger: #fb7185;
+  --glass: rgba(255, 255, 255, 0.03);
+  --radius: 10px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: linear-gradient(180deg, #071029 0%, #0b1220 100%);
+  color: #e6eef8;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.container {
+  max-width: 980px;
+  margin: 32px auto;
+  padding: 24px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.01)
+  );
+  border-radius: var(--radius);
+  box-shadow: 0 6px 22px rgba(6, 9, 15, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+h1 {
+  margin: 0 0 6px 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+p {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+form#uploadForm {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 12px 0;
+}
+
+form#uploadForm input[type="text"],
+form#uploadForm input[type="email"],
+form#uploadForm input[type="file"] {
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  padding: 10px 12px;
+  border-radius: 8px;
+  outline: none;
+}
+
+form#uploadForm input[type="text"] {
+  width: 220px;
+}
+form#uploadForm input[type="email"] {
+  width: 260px;
+}
+form#uploadForm input[type="file"] {
+  padding: 8px;
+}
+
+button {
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  color: #052025;
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(45, 110, 205, 0.12);
+}
+
+button#snap {
+  background: linear-gradient(180deg, #fef3c7, #facc15);
+  color: #081019;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.04),
+    transparent
+  );
+  margin: 18px 0;
+}
+
+#video {
+  border-radius: 8px;
+  background: #000;
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.6);
+}
+
+#result {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
+    monospace;
+  background: var(--glass);
+  padding: 12px;
+  border-radius: 8px;
+  color: #d9eefc;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+@media (max-width: 700px) {
+  .container {
+    margin: 16px;
+    padding: 16px;
+  }
+  form#uploadForm input[type="text"],
+  form#uploadForm input[type="email"] {
+    width: 100%;
+  }
+  video {
+    width: 100% !important;
+    height: auto !important;
+  }
+}
+
+/* small utility */
+.muted {
+  color: var(--muted);
+}
+
+/* accessibility: focus styles */
+input:focus,
+button:focus {
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
+  outline: none;
+}
