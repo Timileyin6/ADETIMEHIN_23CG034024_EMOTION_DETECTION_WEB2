@@ -157,33 +157,21 @@ def analyze():
 
     result, face_crop, confidence_dict = detect_emotion_from_image(img_bgr)
 
-    ts = datetime.utcnow().isoformat()
-    filename = f"{name.replace(' ', '_')}_{ts.replace(':','-')}.jpg"
-    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-    # if face crop exists save that; else save full image
+    # No longer save images to disk
+    # Prepare face preview (base64) if available
     if face_crop is not None:
-        cv2.imwrite(save_path, face_crop)
-        # encode face crop as base64 data URL so frontend can preview immediately
         try:
             _, jpg = cv2.imencode('.jpg', face_crop)
             face_base64 = 'data:image/jpeg;base64,' + base64.b64encode(jpg.tobytes()).decode('ascii')
         except Exception:
             face_base64 = None
     else:
-        cv2.imwrite(save_path, img_bgr)
         face_base64 = None
 
-    # store record
-    db = get_db()
-    db.execute("INSERT INTO records (name, email, timestamp, image_path, result) VALUES (?, ?, ?, ?, ?)",
-               (name, email, ts, save_path, result))
-    db.commit()
-
+    # Do not store any record in the database, just return prediction
     return jsonify({
         "status": "ok", 
         "result": result, 
-        "image_saved": save_path,
         "confidence": confidence_dict,  # include all emotion probabilities
         "face_base64": face_base64
     })
