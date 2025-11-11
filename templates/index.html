@@ -1,79 +1,216 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>Emotion Detection Web App</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="/static/style.css" />
-</head>
-<body>
-  <div class="container">
-    <h1>Emotion Detector (lightweight)</h1>
-    <p>Upload an image or capture from your camera.</p>
+  <head>
+    <meta charset="utf-8" />
+    <title>Emotion Detection Web App</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Emotion Detector (lightweight)</h1>
+      <p>Upload an image or capture from your camera.</p>
 
-    <form id="uploadForm">
-      <input type="text" name="name" placeholder="Your name (optional)" />
-      <input type="email" name="email" placeholder="Email (optional)" />
-      <input type="file" name="file" accept="image/*" />
-      <button type="submit">Upload & Analyze</button>
-    </form>
+      <form id="uploadForm">
+        <input type="text" name="name" placeholder="Your name (optional)" />
+        <input type="email" name="email" placeholder="Email (optional)" />
+        <input type="file" name="file" accept="image/*" />
+        <button type="submit">Upload & Analyze</button>
+      </form>
 
-    <hr />
+      <hr />
 
-    <div>
-      <h3>Live capture</h3>
-      <video id="video" autoplay playsinline width="320" height="240"></video>
-      <br />
-      <button id="snap">Capture & Analyze</button>
+      <div>
+        <h3>Live capture</h3>
+        <video id="video" autoplay playsinline width="320" height="240"></video>
+        <br />
+        <div
+          style="margin-top: 8px; display: flex; gap: 8px; align-items: center"
+        >
+          <button id="startCamera">Start camera</button>
+          <button id="stopCamera" disabled>Stop camera</button>
+          <button id="snap">Capture & Analyze</button>
+          <span id="cameraStatus" class="muted" style="margin-left: 8px"
+            >Camera inactive</span
+          >
+        </div>
+      </div>
+
+      <hr />
+      <div id="result">
+        <div id="resultSummary">Result will appear here</div>
+        <div id="facePreview" style="margin-top: 12px"></div>
+        <div id="confTable" style="margin-top: 12px"></div>
+      </div>
+
+      <hr />
+      <div>
+        <button id="listRecords">Show recent records (console)</button>
+      </div>
     </div>
 
-    <hr />
-    <div id="result">Result will appear here</div>
+    <script>
+      const uploadForm = document.getElementById("uploadForm");
+      uploadForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fd = new FormData(uploadForm);
+        const res = await fetch("/analyze", { method: "POST", body: fd });
+        const j = await res.json();
+        renderResult(j);
+      });
 
-    <hr />
-    <div>
-      <button id="listRecords">Show recent records (console)</button>
-    </div>
-  </div>
+      const video = document.getElementById("video");
+      const startBtn = document.getElementById("startCamera");
+      const stopBtn = document.getElementById("stopCamera");
+      const snapBtn = document.getElementById("snap");
+      // disable capture until camera is active
+      snapBtn.disabled = true;
+      const cameraStatus = document.getElementById("cameraStatus");
+      let localStream = null;
 
-<script>
-const uploadForm = document.getElementById("uploadForm");
-uploadForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const fd = new FormData(uploadForm);
-  const res = await fetch("/analyze", {method:"POST", body: fd});
-  const j = await res.json();
-  document.getElementById("result").innerText = JSON.stringify(j, null, 2);
-});
+      async function startCamera() {
+        try {
+          cameraStatus.innerText = "Requesting camera...";
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+          });
+          localStream = stream;
+          video.srcObject = stream;
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+          snapBtn.disabled = false;
+          cameraStatus.innerText = "Camera active";
+        } catch (err) {
+          console.error("Camera error:", err);
+          cameraStatus.innerText =
+            "Camera error: " + (err.name || err.message || err);
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+        }
+      }
 
-const video = document.getElementById("video");
-navigator.mediaDevices && navigator.mediaDevices.getUserMedia({video:true})
-  .then(stream => { video.srcObject = stream; })
-  .catch(e => { console.log("No camera or permission denied", e); });
+      function stopCamera() {
+        if (localStream) {
+          localStream.getTracks().forEach((t) => t.stop());
+          localStream = null;
+          video.srcObject = null;
+        }
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        snapBtn.disabled = true;
+        cameraStatus.innerText = "Camera stopped";
+      }
 
-document.getElementById("snap").addEventListener("click", async () => {
-  const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth || 320;
-  canvas.height = video.videoHeight || 240;
-  canvas.getContext("2d").drawImage(video, 0, 0);
-  const dataUrl = canvas.toDataURL("image/jpeg");
-  const name = prompt("Your name (optional)") || "anonymous";
-  const email = "";
-  const fd = new FormData();
-  fd.append("name", name);
-  fd.append("email", email);
-  fd.append("imageBase64", dataUrl);
-  const res = await fetch("/analyze", {method:"POST", body: fd});
-  const j = await res.json();
-  document.getElementById("result").innerText = JSON.stringify(j, null, 2);
-});
+      // Try to auto-start on secure/localhost contexts, otherwise wait for user
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // attempt auto-start but don't block UI if it fails
+        navigator.mediaDevices
+          .getUserMedia({ video: true })
+          .then((s) => {
+            localStream = s;
+            video.srcObject = s;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            snapBtn.disabled = false;
+            cameraStatus.innerText = "Camera active";
+          })
+          .catch((e) => {
+            console.log(
+              "Auto camera start failed (permissions or insecure origin)",
+              e
+            );
+            cameraStatus.innerText = "Camera inactive";
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            snapBtn.disabled = true;
+          });
+      } else {
+        cameraStatus.innerText = "Camera not supported in this browser";
+        startBtn.disabled = true;
+      }
 
-document.getElementById("listRecords").addEventListener("click", async () => {
-  const res = await fetch("/records");
-  const recs = await res.json();
-  console.log("Recent records:", recs);
-  alert("Check browser console for records (or call /records endpoint).");
-});
-</script>
-</body>
+      startBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        startCamera();
+      });
+      stopBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        stopCamera();
+      });
+
+      document.getElementById("snap").addEventListener("click", async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        const dataUrl = canvas.toDataURL("image/jpeg");
+        const name = prompt("Your name (optional)") || "anonymous";
+        const email = "";
+        const fd = new FormData();
+        fd.append("name", name);
+        fd.append("email", email);
+        fd.append("imageBase64", dataUrl);
+        const res = await fetch("/analyze", { method: "POST", body: fd });
+        const j = await res.json();
+        renderResult(j);
+      });
+
+      function renderResult(j) {
+        const summary = document.getElementById("resultSummary");
+        const preview = document.getElementById("facePreview");
+        const confTable = document.getElementById("confTable");
+        if (!j || j.status !== "ok") {
+          summary.innerText =
+            "Error: " + (j && j.message ? j.message : "Unknown error");
+          preview.innerHTML = "";
+          confTable.innerHTML = "";
+          return;
+        }
+        // show top-level result
+        summary.innerHTML = `<strong>Prediction:</strong> ${j.result}`;
+
+        // show face preview if provided
+        if (j.face_base64) {
+          preview.innerHTML = `<img src="${j.face_base64}" alt="face" style="max-width:160px; border-radius:8px; border:1px solid rgba(255,255,255,0.04);" />`;
+        } else {
+          preview.innerHTML = "";
+        }
+
+        // show confidence table sorted
+        if (j.confidence && Object.keys(j.confidence).length) {
+          const items = Object.entries(j.confidence).sort(
+            (a, b) => b[1] - a[1]
+          );
+          let html = '<table style="width:100%; border-collapse:collapse">';
+          html +=
+            '<tr><th style="text-align:left">Emotion</th><th style="text-align:right">Probability</th></tr>';
+          for (const [label, prob] of items) {
+            const pct = (prob * 100).toFixed(1) + "%";
+            html += `<tr><td>${label}</td><td style="text-align:right">${pct}</td></tr>`;
+          }
+          html += "</table>";
+          confTable.innerHTML = html;
+
+          // low-confidence hint
+          const topProb = items[0][1];
+          if (topProb < 0.3) {
+            summary.innerHTML += ` <span style="color:#fca5a5; font-weight:600;">(low confidence)</span>`;
+          }
+        } else {
+          confTable.innerHTML = "";
+        }
+      }
+
+      document
+        .getElementById("listRecords")
+        .addEventListener("click", async () => {
+          const res = await fetch("/records");
+          const recs = await res.json();
+          console.log("Recent records:", recs);
+          alert(
+            "Check browser console for records (or call /records endpoint)."
+          );
+        });
+    </script>
+  </body>
 </html>

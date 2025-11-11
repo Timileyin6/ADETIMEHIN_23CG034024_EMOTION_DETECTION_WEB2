@@ -1,0 +1,13 @@
+# Emotion Detection Web App - Hosting Link
+
+RENDER - https://adetimehin-23cg034024-emotion-detection.onrender.com/
+
+---
+DEPLOYED APPLICATION LINK:
+Platform: Render
+URL: https://adetimehin-23cg034024-emotion-detection.onrender.com/
+Deployed on: 2nd of November 2025
+Status: [Active]
+---
+
+

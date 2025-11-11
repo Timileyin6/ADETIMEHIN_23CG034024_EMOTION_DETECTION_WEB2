@@ -6,6 +6,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, g
 import numpy as np
 import cv2
+from tensorflow.keras.models import load_model
 
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -18,8 +19,18 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Load Haar cascades (bundled with opencv-python)
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
-eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+
+# Load pre-trained emotion model
+try:
+    emotion_model = load_model("_mini_XCEPTION.102-0.66.hdf5")
+    model_loaded = True
+    print("✓ Emotion model loaded successfully")
+except Exception as e:
+    print(f"⚠ Failed to load emotion model: {e}")
+    model_loaded = False
+
+# Emotion labels (7 classes: Angry, Disgust, Fear, Happy, Neutral, Sad, Surprise)
+EMOTION_LABELS = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
 
 # --- Database helpers ---
 def get_db():
@@ -50,36 +61,70 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
-# --- Simple heuristic emotion detector ---
+# --- Improved emotion detector using trained model ---
 def detect_emotion_from_image(img_bgr):
-    """Return one of: 'happy', 'surprised', 'neutral', 'sad/other'"""
+    """
+    Detect emotion using pre-trained Keras model.
+    Returns: (emotion_label, face_crop, confidence_dict)
+    """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
+    
+    # Enhanced face detection: use multiple scales
+    faces = face_cascade.detectMultiScale(
+        gray, 
+        scaleFactor=1.05,      # finer scale steps for better detection
+        minNeighbors=5,         # stricter neighbor count
+        minSize=(64, 64),       # require minimum face size
+        maxSize=(400, 400)      # and maximum
+    )
+    
     if len(faces) == 0:
-        return "no_face_detected", None
+        return "no_face_detected", None, {}
 
-    # pick largest face
+    # Pick largest face
     x, y, w, h = sorted(faces, key=lambda f: f[2]*f[3], reverse=True)[0]
     face_roi_gray = gray[y:y+h, x:x+w]
     face_roi_color = img_bgr[y:y+h, x:x+w]
 
-    # smile detection
-    smiles = smile_cascade.detectMultiScale(face_roi_gray, scaleFactor=1.7, minNeighbors=20)
-    eyes = eye_cascade.detectMultiScale(face_roi_gray, scaleFactor=1.1, minNeighbors=8)
+    # Preprocess for model: resize to match trained model input (64x64), grayscale
+    face_resized = cv2.resize(face_roi_gray, (64, 64))
+    
+    # Apply histogram equalization to improve contrast
+    face_equalized = cv2.equalizeHist(face_resized)
+    
+    # Normalize to [0, 1] range
+    face_normalized = face_equalized.astype('float32') / 255.0
+    
+    # Add channel and batch dimensions for model input
+    face_input = np.expand_dims(np.expand_dims(face_normalized, axis=-1), axis=0)
 
-    # heuristic rules
-    if len(smiles) > 0:
-        emotion = "happy"
-    elif len(eyes) >= 2 and h/w > 0.9:
-        # relatively tall face + open eyes -> maybe surprised
-        emotion = "surprised"
+    # Predict emotion
+    if model_loaded:
+        try:
+            predictions = emotion_model.predict(face_input, verbose=0)
+            confidence_dict = {EMOTION_LABELS[i]: float(predictions[0][i]) for i in range(len(EMOTION_LABELS))}
+            emotion_idx = np.argmax(predictions[0])
+            emotion = EMOTION_LABELS[emotion_idx]
+            confidence = float(predictions[0][emotion_idx])
+            
+            # Only return prediction if confidence > 30%
+            if confidence < 0.3:
+                emotion = f"{emotion} (low confidence: {confidence:.1%})"
+        except Exception as e:
+            print(f"Model prediction error: {e}")
+            emotion = "prediction_error"
+            confidence_dict = {}
+            confidence = 0.0
     else:
-        # fallback guess
-        emotion = "neutral"
+        # Fallback to rule-based if model not loaded
+        emotion = "model_unavailable"
+        confidence_dict = {}
+        confidence = 0.0
 
-    # cropped face for storing
+    # Store cropped face
     face_bgr = face_roi_color.copy()
-    return emotion, face_bgr
+    
+    return emotion, face_bgr, confidence_dict
 
 # --- Routes ---
 @app.route("/")
@@ -110,7 +155,7 @@ def analyze():
     if img_bgr is None:
         return jsonify({"status":"error","message":"Failed to decode image"}), 400
 
-    result, face_crop = detect_emotion_from_image(img_bgr)
+    result, face_crop, confidence_dict = detect_emotion_from_image(img_bgr)
 
     ts = datetime.utcnow().isoformat()
     filename = f"{name.replace(' ', '_')}_{ts.replace(':','-')}.jpg"
@@ -119,8 +164,15 @@ def analyze():
     # if face crop exists save that; else save full image
     if face_crop is not None:
         cv2.imwrite(save_path, face_crop)
+        # encode face crop as base64 data URL so frontend can preview immediately
+        try:
+            _, jpg = cv2.imencode('.jpg', face_crop)
+            face_base64 = 'data:image/jpeg;base64,' + base64.b64encode(jpg.tobytes()).decode('ascii')
+        except Exception:
+            face_base64 = None
     else:
         cv2.imwrite(save_path, img_bgr)
+        face_base64 = None
 
     # store record
     db = get_db()
@@ -128,7 +180,13 @@ def analyze():
                (name, email, ts, save_path, result))
     db.commit()
 
-    return jsonify({"status":"ok", "result": result, "image_saved": save_path})
+    return jsonify({
+        "status": "ok", 
+        "result": result, 
+        "image_saved": save_path,
+        "confidence": confidence_dict,  # include all emotion probabilities
+        "face_base64": face_base64
+    })
 
 @app.route("/records", methods=["GET"])
 def records():

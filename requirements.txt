@@ -1,3 +1,4 @@
 Flask>=2.0
 opencv-python>=4.5
 numpy>=1.21
+tensorflow>=2.10  # For emotion model inference
