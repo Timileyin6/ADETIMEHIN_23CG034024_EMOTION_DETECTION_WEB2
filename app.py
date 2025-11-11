@@ -22,7 +22,7 @@ face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_fronta
 
 # Load pre-trained emotion model
 try:
-    emotion_model = load_model("_mini_XCEPTION.102-0.66.hdf5")
+    emotion_model = load_model("_mini_XCEPTION.102-0.66.hdf5", compile=False)
     model_loaded = True
     print("✓ Emotion model loaded successfully")
 except Exception as e:
